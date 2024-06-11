@@ -1,5 +1,5 @@
 # birchaxe-cipher
-A 256-bit feisel block cipher using 512-bit keys. 
+A 256-bit feistel block cipher using 512-bit keys. 
 
 ## Overview
 This project implements a feistel block cipher.

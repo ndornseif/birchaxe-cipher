@@ -2,7 +2,7 @@
 //
 // Dual-licensed under Apache 2.0 and MIT terms.
 
-//! BIRCHAXE is a 256bit block cipher using 512bit keys.
+//! BIRCHAXE is a 256bit feistel block cipher using 512bit keys.
 //! This module utility functions
 
 use std::fmt::Write;

@@ -2,7 +2,7 @@
 //
 // Dual-licensed under Apache 2.0 and MIT terms.
     
-//! BIRCHAXE is a 256bit feisel block cipher using 512bit keys.
+//! BIRCHAXE is a 256bit feistel block cipher using 512bit keys.
 //! This module contains the basic cryptographic functions.
 
 // ------------------------TODO------------------------
