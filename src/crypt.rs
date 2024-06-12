@@ -7,7 +7,6 @@
 
 // ------------------------TODO------------------------
 // USE BLOCK SIZE CONSTANT
-// USE ROUND CONSTANT
 // ----------------------------------------------------
 
 use sha2::{Sha512, Sha512_256, Digest};
@@ -125,24 +124,24 @@ fn round_function(data: [u8; 16], subkey: [u8; 16], round: usize) -> [u8; 16] {
 // Perform a full feistel round
 //
 // Apply round function before swapping left and right
-fn feistel_round(left: &mut [u8; 16], right: &mut [u8; 16], round: usize, subkey: [u8; 16]) {
+fn feistel_round(left: &mut [u8; 16], right: &mut [u8; 16], round: usize, subkey: &[u8; 16]) {
     let old_right = *right;
-    *right = xor_halfblock(*left, round_function(*right, subkey, round));
+    *right = xor_halfblock(*left, round_function(*right, *subkey, round));
     *left = old_right;
 }
 
 // Encrpyt 256bit block
 //
 // Perform full cipher encryption on 256bit block using 36*16bit subkey-array.
-pub fn encrypt_block(plaintext: [u8; 32], subkeys: [[u8; 16]; 36], rounds: u16) -> [u8; 32] {
+pub fn encrypt_block(plaintext: &[u8; 32], subkeys: &[[u8; 16]; 36]) -> [u8; 32] {
     let mut left: [u8; 16] = (&plaintext[0..16]).try_into().unwrap();
     let mut right: [u8; 16] = (&plaintext[16..32]).try_into().unwrap();
     // Input whitening
     left = xor_halfblock(left, subkeys[32]);
     right = xor_halfblock(right, subkeys[33]);
-    for i in 0..rounds {
+    for i in 0..constants::ROUND_COUNT {
         // If more than 32 rounds are set start reusing round constants and subkeys.
-        feistel_round(&mut left, &mut right, (i % 32) as usize, subkeys[(i % 32) as usize]);
+        feistel_round(&mut left, &mut right, i, &subkeys[i]);
     }
     // Output whitening
     left = xor_halfblock(left, subkeys[34]);
@@ -156,17 +155,17 @@ pub fn encrypt_block(plaintext: [u8; 32], subkeys: [[u8; 16]; 36], rounds: u16) 
 // Decrypt 128bit block
 //
 // Perform full cipher decryption on 128bit block using 4608bit subkey-array
-pub fn decrypt_block(plaintext: [u8; 32], subkeys: [[u8; 16]; 36], rounds: u16) -> [u8; 32] {
+pub fn decrypt_block(plaintext: &[u8; 32], subkeys: &[[u8; 16]; 36]) -> [u8; 32] {
     let mut left: [u8; 16] = (&plaintext[0..16]).try_into().unwrap();
     let mut right: [u8; 16] = (&plaintext[16..32]).try_into().unwrap();
     // Undo output whitening
     left = xor_halfblock(left, subkeys[34]);
     right = xor_halfblock(right, subkeys[35]);
-    for i in 0..rounds {
+    for i in 0..constants::ROUND_COUNT {
         // Apply round keys and round constants in reverse order.
-        let reverse_i: u16 = (rounds-1)-i;
+        let reverse_i: usize = (constants::ROUND_COUNT-1)-i;
         // If more than 32 rounds are set start reusing round constants and subkeys.
-        feistel_round(&mut right, &mut left, (reverse_i % 32) as usize, subkeys[(reverse_i % 32) as usize]);
+        feistel_round(&mut right, &mut left, reverse_i, &subkeys[reverse_i]);
     }
     // Undo input whitening
     left = xor_halfblock(left, subkeys[32]);
@@ -180,13 +179,13 @@ pub fn decrypt_block(plaintext: [u8; 32], subkeys: [[u8; 16]; 36], rounds: u16) 
 /// Generate Subkeys
 ///
 /// Expands the 512bit key to 36*16bit subkey-array using SHA-512.
-pub fn subkey_generation(key: [u8; 64]) -> [[u8; 16]; 36] {
+pub fn subkey_generation(key: &[u8; 64]) -> [[u8; 16]; 36] {
     // Start with constant initialization vector
     let mut last_digest: [u8; 64] = constants::KDF_IV;
     let mut subkeys = [[0u8; 16]; 36];
     for key_block in subkeys.iter_mut(){
         let mut hasher = Sha512::new();
-        hasher.update(key);
+        hasher.update(*key);
         hasher.update(last_digest);
         last_digest = hasher.finalize().into();
         *key_block = (&last_digest[..16]).try_into().unwrap();
@@ -220,10 +219,9 @@ mod unit_tests {
     #[test]
     /// Checks if the plaintext is correctly returned when encrypting and decrypting.
     fn encrypt_decrypt_block() {
-        let test_rounds = 32u16;
-        let subkeys = subkey_generation(TEST_KEY);
-        let ciphertext = encrypt_block(TEST_DATA_BLOCK, subkeys, test_rounds);
-        let plaintext = decrypt_block(ciphertext, subkeys, test_rounds);
+        let subkeys = subkey_generation(&TEST_KEY);
+        let ciphertext = encrypt_block(&TEST_DATA_BLOCK, &subkeys);
+        let plaintext = decrypt_block(&ciphertext, &subkeys);
         assert_eq!(TEST_DATA_BLOCK, plaintext, "Plaintext changed after encrypting and decrypting.");
     }
     #[test]
@@ -235,7 +233,7 @@ mod unit_tests {
         let mut header = [0u8; 64];
         let base_hmac = generate_hmac(&data, &key, &header);
         println!("{:?}", data);
-        // Flip last bit in first block
+        // Flip first bit in first block
         data[0][0] ^= 1;
         let data_diff_hmac = generate_hmac(&data, &key, &header);
         // Flip back data bit

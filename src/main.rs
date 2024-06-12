@@ -6,6 +6,7 @@ pub mod crypt;
 pub mod constants;
 pub mod filesystem;
 pub mod utils;
+pub mod modes;
 
 //use crate::filesystem;
 
@@ -27,9 +28,4 @@ macro_rules! time_it {
 }
 
 
-fn main() {
-    let mut padding: usize = 0;
-    let mut read_header = [0u8; 64];
-    let mut read_hmac = [0u8; 32];
-    time_it!("", let _file_content = filesystem::read_cipherfile(&String::from("testfiles/img4.ppm"), &mut padding, &mut read_header, &mut read_hmac).unwrap());
-}
+fn main() {}

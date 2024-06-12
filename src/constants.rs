@@ -60,5 +60,5 @@ pub const BLOCK_SIZE: usize = 32;
 
 // Number of feistel rounds used in the cipher
 // 32 rounds is the only possible value. This is only here to make clear where array lenghts ect. come from.
-pub static ROUND_COUNT: u16 = 32;
+pub static ROUND_COUNT: usize = 32;
 
