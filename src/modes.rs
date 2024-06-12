@@ -10,6 +10,7 @@
 // ----------------------------------------------------
 
 use crate::crypt;
+use crate::utils;
 
 /// ECB encrypt a vec of blocks
 ///
@@ -31,6 +32,18 @@ fn ecb_decrypt(data: &mut Vec<[u8; 32]>, subkeys: &[[u8; 16]; 36]) {
     }
 }
 
+/// CTR encrypt a vec of blocks
+///
+/// XORs both halfs of the nonce with a block counter to generate feistel cipher input.
+/// Adds nonce to the end of data vec. Nonce needs to be random to resist chosen-plaintext attacks.
+// fn ctr_encrypt(data: &mut Vec<[u8; 32]>, subkeys: &[[u8; 16]; 36], nonce: &[u8; 32]) {
+//     for (i, block) in data.iter_mut().enumerate() {
+//         let mut crypt_block: [u8; 32] = encrypt_block(, subkeys);
+//         crypt_block[0] = crypt_block[0] ^ block[0];
+//         crypt_block[1] = crypt_block[1] ^ block[1];
+//         *block = crypt_block;
+//     }
+// }
 
 
 #[cfg(test)]

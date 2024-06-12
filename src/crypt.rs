@@ -11,6 +11,11 @@
 
 use sha2::{Sha512, Sha512_256, Digest};
 use crate::constants;
+use crate::utils::{
+    xor_128bit,
+    wrapping_add_128bit,
+    left_rotate_128bit
+};
 
 /// Apply the S-Boxes to byte array
 ///
@@ -45,32 +50,7 @@ fn apply_transposition(data: &mut [u8; 16]) {
     *data = transposed;
 }
 
-/// Perform wrapping addition on two 128bit values
-///
-/// Takes two 16 byte arrays and performs wrapping addition. 
-fn wrapping_add_halfblock(a: [u8; 16], b: [u8; 16]) -> [u8; 16] {
-    let a = u128::from_be_bytes(a);
-    let b = u128::from_be_bytes(b);
-    a.wrapping_add(b).to_be_bytes()
-}
 
-/// Perform XOR on two 128bit values
-///
-/// Takes two 16 byte arrays and performs bitwise XOR. 
-fn xor_halfblock(a: [u8; 16], b: [u8; 16]) -> [u8; 16] {
-    let a = u128::from_be_bytes(a);
-    let b = u128::from_be_bytes(b);
-    (a ^ b).to_be_bytes() 
-}
-
-/// Perform bit rotaion on 128bit value
-///
-/// Takes in a 16 byte array and a shift amount.
-/// Shifts the bits in the array as a u128.
-fn left_rotate_halfblock(a: [u8; 16], amount: u32) -> [u8; 16] {
-    let a = u128::from_be_bytes(a);
-    a.rotate_left(amount).to_be_bytes()
-}
 
 /// Feistel round function (F function)
 ///
@@ -88,13 +68,13 @@ fn round_function(data: [u8; 16], subkey: [u8; 16], round: usize) -> [u8; 16] {
         }
     }
     // Genrate two versions of the data with a key dependent shift
-    let mut data0 = left_rotate_halfblock(data, shifts[4]);
-    let mut data1 = left_rotate_halfblock(data, shifts[0]);
+    let mut data0 = left_rotate_128bit(data, shifts[4]);
+    let mut data1 = left_rotate_128bit(data, shifts[0]);
     // Mix in round constants
-    let constant0 = left_rotate_halfblock(constants::ROUND_CONSTANTS[round][0], shifts[7]);
-    let constant1 = left_rotate_halfblock(constants::ROUND_CONSTANTS[round][1], shifts[9]);
-    data0 = xor_halfblock(constant0, data0);
-    data1 = xor_halfblock(constant1, data1);
+    let constant0 = left_rotate_128bit(constants::ROUND_CONSTANTS[round][0], shifts[7]);
+    let constant1 = left_rotate_128bit(constants::ROUND_CONSTANTS[round][1], shifts[9]);
+    data0 = xor_128bit(constant0, data0);
+    data1 = xor_128bit(constant1, data1);
     // Substitute bytes.
     apply_sboxes(&mut data0);
     apply_sboxes(&mut data1);
@@ -102,23 +82,23 @@ fn round_function(data: [u8; 16], subkey: [u8; 16], round: usize) -> [u8; 16] {
     apply_transposition(&mut data0);
     apply_transposition(&mut data1);
     // Mix in round constants the other way around
-    let constant0 = left_rotate_halfblock(constants::ROUND_CONSTANTS[round][1], shifts[10]);
-    let constant1 = left_rotate_halfblock(constants::ROUND_CONSTANTS[round][0], shifts[8]);
-    data0 = xor_halfblock(constant0, data0);
-    data1 = xor_halfblock(constant1, data1);
+    let constant0 = left_rotate_128bit(constants::ROUND_CONSTANTS[round][1], shifts[10]);
+    let constant1 = left_rotate_128bit(constants::ROUND_CONSTANTS[round][0], shifts[8]);
+    data0 = xor_128bit(constant0, data0);
+    data1 = xor_128bit(constant1, data1);
     // Mix in subkey
-    let mut mykey = left_rotate_halfblock(subkey, shifts[1]);
-    data0 = wrapping_add_halfblock(data0, mykey);
-    mykey = left_rotate_halfblock(subkey, shifts[3]);
-    data1 = wrapping_add_halfblock(data1, mykey);
+    let mut mykey = left_rotate_128bit(subkey, shifts[1]);
+    data0 = wrapping_add_128bit(data0, mykey);
+    mykey = left_rotate_128bit(subkey, shifts[3]);
+    data1 = wrapping_add_128bit(data1, mykey);
     // Pseudo-Hadamard transform
-    let mut data2 = wrapping_add_halfblock(data0, data1);
-    let mut data3 = wrapping_add_halfblock(data0, wrapping_add_halfblock(data1, data1));
+    let mut data2 = wrapping_add_128bit(data0, data1);
+    let mut data3 = wrapping_add_128bit(data0, wrapping_add_128bit(data1, data1));
     // Final combination
-    data2 = left_rotate_halfblock(data2, shifts[6]);
-    data3 = left_rotate_halfblock(data3, shifts[5]);
-    let result = xor_halfblock(data2, data3);
-    left_rotate_halfblock(result, shifts[2])
+    data2 = left_rotate_128bit(data2, shifts[6]);
+    data3 = left_rotate_128bit(data3, shifts[5]);
+    let result = xor_128bit(data2, data3);
+    left_rotate_128bit(result, shifts[2])
 }
 
 // Perform a full feistel round
@@ -126,7 +106,7 @@ fn round_function(data: [u8; 16], subkey: [u8; 16], round: usize) -> [u8; 16] {
 // Apply round function before swapping left and right
 fn feistel_round(left: &mut [u8; 16], right: &mut [u8; 16], round: usize, subkey: &[u8; 16]) {
     let old_right = *right;
-    *right = xor_halfblock(*left, round_function(*right, *subkey, round));
+    *right = xor_128bit(*left, round_function(*right, *subkey, round));
     *left = old_right;
 }
 
@@ -137,15 +117,14 @@ pub fn encrypt_block(plaintext: &[u8; 32], subkeys: &[[u8; 16]; 36]) -> [u8; 32]
     let mut left: [u8; 16] = (&plaintext[0..16]).try_into().unwrap();
     let mut right: [u8; 16] = (&plaintext[16..32]).try_into().unwrap();
     // Input whitening
-    left = xor_halfblock(left, subkeys[32]);
-    right = xor_halfblock(right, subkeys[33]);
+    left = xor_128bit(left, subkeys[32]);
+    right = xor_128bit(right, subkeys[33]);
     for i in 0..constants::ROUND_COUNT {
-        // If more than 32 rounds are set start reusing round constants and subkeys.
         feistel_round(&mut left, &mut right, i, &subkeys[i]);
     }
     // Output whitening
-    left = xor_halfblock(left, subkeys[34]);
-    right = xor_halfblock(right, subkeys[35]);
+    left = xor_128bit(left, subkeys[34]);
+    right = xor_128bit(right, subkeys[35]);
     let mut result = [0u8; 32];
     result[..16].copy_from_slice(&left);
     result[16..].copy_from_slice(&right);
@@ -159,17 +138,16 @@ pub fn decrypt_block(plaintext: &[u8; 32], subkeys: &[[u8; 16]; 36]) -> [u8; 32]
     let mut left: [u8; 16] = (&plaintext[0..16]).try_into().unwrap();
     let mut right: [u8; 16] = (&plaintext[16..32]).try_into().unwrap();
     // Undo output whitening
-    left = xor_halfblock(left, subkeys[34]);
-    right = xor_halfblock(right, subkeys[35]);
+    left = xor_128bit(left, subkeys[34]);
+    right = xor_128bit(right, subkeys[35]);
     for i in 0..constants::ROUND_COUNT {
         // Apply round keys and round constants in reverse order.
         let reverse_i: usize = (constants::ROUND_COUNT-1)-i;
-        // If more than 32 rounds are set start reusing round constants and subkeys.
         feistel_round(&mut right, &mut left, reverse_i, &subkeys[reverse_i]);
     }
     // Undo input whitening
-    left = xor_halfblock(left, subkeys[32]);
-    right = xor_halfblock(right, subkeys[33]);
+    left = xor_128bit(left, subkeys[32]);
+    right = xor_128bit(right, subkeys[33]);
     let mut result = [0u8; 32];
     result[..16].copy_from_slice(&left);
     result[16..].copy_from_slice(&right);
