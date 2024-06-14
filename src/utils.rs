@@ -86,7 +86,6 @@ pub fn wrapping_add_256bit_u64(a: [u8; 32], b: u64) -> [u8; 32] {
         result[i] = sum as u8;
         carry = sum >> 8;
     }
-    result.reverse();
     result
 }
 
@@ -150,6 +149,6 @@ mod unit_tests {
     fn test_wrapping_add_256bit_u64() {
         const INPUT_A: [u8; 32] = [0xff; 32];
         let rslt = wrapping_add_256bit_u64(INPUT_A, 2u64);
-        assert_eq!(rslt, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+        assert_eq!(rslt, [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     }
 }

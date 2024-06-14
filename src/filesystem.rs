@@ -31,7 +31,7 @@ pub static MAX_BLOCKS: u64 = 50_000_000;
 /// 
 /// A crypt header is a string of bytes that give the decrypting tool info
 /// Nonce and version
-fn generate_cryt_header(nonce: [u8; 32]) -> [u8; 64]{
+pub fn generate_cryt_header(nonce: [u8; 32]) -> [u8; 64]{
     let mut header = [0u8; 64];
     header[0..4].copy_from_slice(&CIPHER_ID);
     header[4..36].copy_from_slice(&nonce);
@@ -43,7 +43,7 @@ fn generate_cryt_header(nonce: [u8; 32]) -> [u8; 64]{
 /// 
 /// A crypt header is a string of bytes that give the decrypting tool info
 /// Nonce, version and rounds used
-fn read_cryt_header(header: [u8; 64], cipher_id: &mut [u8; 4], nonce: &mut [u8; 32]) {
+pub fn read_cryt_header(header: [u8; 64], cipher_id: &mut [u8; 4], nonce: &mut [u8; 32]) {
     *cipher_id = (&header[0..4]).try_into().unwrap();
     *nonce = (&header[4..36]).try_into().unwrap();
 }

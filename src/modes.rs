@@ -11,6 +11,7 @@
 
 use crate::crypt;
 use crate::utils;
+use crate::filesystem;
 
 /// ECB encrypt a vec of blocks
 ///
@@ -39,7 +40,7 @@ fn ecb_decrypt(data: &mut Vec<[u8; 32]>, subkeys: &[[u8; 16]; 36]) {
 /// Nonce needs to be random to resist chosen-plaintext attacks.
 fn ctr_encrypt(data: &mut Vec<[u8; 32]>, subkeys: &[[u8; 16]; 36], nonce: &[u8; 32]) {
     for (i, block) in data.iter_mut().enumerate() {
-        let mut crypt_block: [u8; 32] = crypt::encrypt_block(&utils::wrapping_add_256bit_u64(*nonce, i as u64), subkeys);
+        let crypt_block: [u8; 32] = crypt::encrypt_block(&utils::wrapping_add_256bit_u64(*nonce, i as u64), subkeys);
         *block = utils::xor_256bit(crypt_block, *block);
     }
 }
@@ -51,7 +52,7 @@ fn ctr_encrypt(data: &mut Vec<[u8; 32]>, subkeys: &[[u8; 16]; 36], nonce: &[u8; 
 /// Nonce needs to be random to resist chosen-plaintext attacks.
 fn ctr_decrypt(data: &mut Vec<[u8; 32]>, subkeys: &[[u8; 16]; 36], nonce: &[u8; 32]) {
     for (i, block) in data.iter_mut().enumerate() {
-        let mut crypt_block: [u8; 32] = crypt::encrypt_block(&utils::wrapping_add_256bit_u64(*nonce, i as u64), subkeys);
+        let crypt_block: [u8; 32] = crypt::encrypt_block(&utils::wrapping_add_256bit_u64(*nonce, i as u64), subkeys);
         *block = utils::xor_256bit(crypt_block, *block);
     }
 }
@@ -67,27 +68,52 @@ mod unit_tests {
 
 	#[test]
     /// Checks if the plaintext is correctly returned when encrypting and decrypting in ECB mode.
-    fn ecb_encrypt_decrypt() {
-    	let mut data = Vec::new();
+    fn ecb_encrypt_decrypt_file() {
+        const TEST_FILE_PATH: &str = "testfiles/unit_tests/ctr_encrypt_decrypt_file.bin";
+        const PADDING: usize = 0;
+        let mut data = Vec::new();
         data.push(TEST_DATA_BLOCK);
         let intial_data = data.clone();
         let subkeys = crypt::subkey_generation(&TEST_KEY);
         ecb_encrypt(&mut data, &subkeys);
-        assert_ne!(intial_data, data);
-        ecb_decrypt(&mut data, &subkeys);
-        assert_eq!(intial_data, data);
+        assert_ne!(intial_data, data, "Encryption did not modify data.");
+        // Fill Nonce with zeros since its not neccesary for ECB mode.
+        let writer_header = filesystem::generate_cryt_header([0u8; 32]);
+        let hmac = crypt::generate_hmac(&data, &TEST_KEY, &writer_header);
+        let _ = filesystem::write_cipherfile(TEST_FILE_PATH, &data, PADDING, &writer_header, &hmac);
+        let mut read_padding: usize = 0;
+        let mut read_header = [0u8; 64];
+        let mut read_hmac = [0u8; 32];
+        let mut file_content = filesystem::read_cipherfile(TEST_FILE_PATH, &mut read_padding, &mut read_header, &mut read_hmac).unwrap();
+        ecb_decrypt(&mut file_content, &subkeys);
+        assert_eq!(file_content, intial_data, "Test data improperly read from test file.");
+        assert_eq!(read_padding, PADDING, "Padding improperly decoded from test file.");
+        assert_eq!(read_header, writer_header, "Header improperly read from test file.");
+        assert_eq!(read_hmac, hmac, "HMAC improperly read from test file.");
     }
 
     #[test]
-    /// Checks if the plaintext is correctly returned when encrypting and decrypting in CTR mode.
-    fn ctr_encrypt_decrypt() {
-    	let mut data = Vec::new();
+    /// Checks if the plaintext is correctly returned when encrypting and decrypting a file in CTR mode.
+    fn ctr_encrypt_decrypt_file() {
+        const TEST_FILE_PATH: &str = "testfiles/unit_tests/ctr_encrypt_decrypt_file.bin";
+        const PADDING: usize = 0;
+        let mut data = Vec::new();
         data.push(TEST_DATA_BLOCK);
         let intial_data = data.clone();
         let subkeys = crypt::subkey_generation(&TEST_KEY);
         ctr_encrypt(&mut data, &subkeys, &TEST_NONCE);
-        assert_ne!(intial_data, data);
-        ctr_decrypt(&mut data, &subkeys, &TEST_NONCE);
-        assert_eq!(intial_data, data);
+        assert_ne!(intial_data, data, "Encryption did not modify data.");
+        let writer_header = filesystem::generate_cryt_header(TEST_NONCE);
+        let hmac = crypt::generate_hmac(&data, &TEST_KEY, &writer_header);
+        let _ = filesystem::write_cipherfile(TEST_FILE_PATH, &data, PADDING, &writer_header, &hmac);
+        let mut read_padding: usize = 0;
+        let mut read_header = [0u8; 64];
+        let mut read_hmac = [0u8; 32];
+        let mut file_content = filesystem::read_cipherfile(TEST_FILE_PATH, &mut read_padding, &mut read_header, &mut read_hmac).unwrap();
+        ctr_decrypt(&mut file_content, &subkeys, &TEST_NONCE);
+        assert_eq!(file_content, intial_data, "Test data improperly read from test file.");
+        assert_eq!(read_padding, PADDING, "Padding improperly decoded from test file.");
+        assert_eq!(read_header, writer_header, "Header improperly read from test file.");
+        assert_eq!(read_hmac, hmac, "HMAC improperly read from test file.");
     }
 }
